@@ -1,0 +1,63 @@
+name: E2E (Cypress)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  cypress:
+    runs-on: ubuntu-latest
+
+    services:
+      mongo:
+        image: mongo:6
+        ports:
+          - 27017:27017
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Optional seed step
+      - name: Seed admin/data
+        run: npm run seed || true
+
+      - name: Start app
+        run: |
+          npm run dev &>/tmp/app.log &
+          npx wait-on http://localhost:4200
+        timeout-minutes: 5
+
+      - name: Cypress run (Chrome)
+        uses: cypress-io/github-action@v6
+        with:
+          browser: chrome
+          spec: cypress/e2e/**/*.cy.ts
+
+      - name: Upload Cypress Artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-artifacts
+          path: |
+            cypress/screenshots
+            cypress/videos
+          if-no-files-found: ignore
+
+      - name: Show app logs
+        if: always()
+        run: |
+          echo "----- APP LOG START -----"
+          tail -n +1 /tmp/app.log || true
+          echo "----- APP LOG END -----"
